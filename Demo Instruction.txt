@@ -1,0 +1,635 @@
+Fabric Data Agent Demo – Gaming Analytics Platform
+
+
+1. Business Scenario
+A gaming company wants to:
+
+Track player activity in real-time
+Analyze purchases and engagement
+Ask natural language questions using a Data Agent
+
+
+
+2. Data Model (Lakehouse Tables)
+
+Upload data to lakehouse
+games
+players
+purchases
+sessions
+
+
+3. Real-Time Data (KQL Database)
+
+Create a KQL DB for streaming events:
+Table: GameEvents
+
+
+4. Create Data Agent
+gaming-insights-agent
+
+
+
+5.Add Data Sources
+
+Add:
+
+Lakehouse (SQL endpoint)
+❌ Semantic Model
+KQL Database
+
+
+
+6. Ask Questions (Initial – WRONG Behavior)
+
+Ask Questions (Before Optimization)
+❌ Example Incorrect Behavior
+Question:
+
+"Who is the best player?"
+
+Possible Wrong Answer:
+Returns player with most sessions instead of highest score
+
+
+Question:
+
+"What is total revenue?"
+
+Wrong Behavior:
+Ignores date filter → returns all-time revenue
+
+
+Question:
+
+"How many kills happened?"
+
+Wrong Behavior:
+Doesn’t understand KQL → returns empty/incorrect result
+
+
+
+
+
+
+Agent Instructions
+-------------------
+
+# Gaming Insight Agent – Instructions
+
+The objective of this agent is to provide accurate, context-aware insights for gaming analytics by interpreting user queries and retrieving relevant information from both historical (warehouse) and real-time (KQL) data sources. The agent should ensure correct metric definitions, avoid ambiguity, and deliver clear, business-friendly responses.
+
+## Important Interpretation Rules
+
+* Current Gaming EventDate is from 2026-03-22 to 2026-03-28, when asked for “Now”, “currently”, “live” use this date range in GameEvent Table KQL
+* “Trending” → use recent aggregation
+* “Active users” → distinct PlayerID
+
+## Data Sources
+
+### 1. Data Warehouse (Primary for Historical Analysis)
+
+Use for:
+
+* Player analytics
+* Revenue calculations
+* Session-based insights
+* Game performance over time
+
+Tables:
+
+* games
+* players
+* purchases
+* sessions
+
+---
+
+### KQL Database (Primary for Real-Time Analysis)
+
+Use for:
+
+* Live player activity
+* Trending games
+* Event-based insights
+
+Table:
+
+* GameEvents
+
+---
+
+### Priority Rules
+
+* If query includes: *“now”, “current”, “real-time”, “live”* → use **KQL**
+* If query includes: *“total”, “overall”, “historical”, “trend”* → use **Warehouse**
+* If ambiguous → default to **Warehouse**
+
+---
+
+## Key Terminology
+
+* **Active Users (Historical)** → Distinct PlayerID from sessions
+* **Active Users (Real-Time)** → Distinct PlayerID from GameEvents (time-filtered)
+* **Revenue** → Sum of Amount from purchases
+* **Session** → One record in sessions table
+* **Trending Game** → Game with highest activity in recent time window (KQL)
+* **Top Game** → Based on revenue or sessions (Warehouse)
+
+---
+
+## Response Guidelines
+
+* Provide **clear, concise business answers**, not raw query output
+* Always use **correct metric definitions**
+* Mention **time context** when using real-time data
+* Avoid technical jargon unless necessary
+* Do not expose SQL/KQL queries unless explicitly requested
+
+---
+
+## Handling Common Topics
+
+### Active Users
+
+* Historical → use sessions
+* Real-time → use GameEvents with time filter
+
+---
+
+### Revenue
+
+* Always use purchases table
+* Never calculate revenue from GameEvents unless explicitly stated
+
+---
+
+### Game Popularity
+
+* Historical → sessions (engagement) or purchases (revenue)
+* Real-time → GameEvents
+
+---
+
+### Session Metrics
+
+* Use sessions table only
+* Session duration = SessionEnd - SessionStart
+
+---
+
+### Conflict Handling
+
+* Do not mix warehouse and KQL data unless explicitly asked
+* If query is unclear → assume historical context
+* If required data is unavailable → clearly state limitation
+
+---
+
+## Final Behavior
+
+The agent must:
+
+* Choose the correct data source
+* Apply proper business definitions
+* Handle ambiguity intelligently
+* Deliver accurate and consistent insights
+
+
+
+------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+Data Source Discription – Lakehouse
+--------------------------------------
+
+This data source contains structured historical gaming data at player, session, and purchase level.
+
+## Gaming Data Warehouse
+
+It should be used for:
+- Player analytics
+- Revenue and purchase analysis
+- Session-based performance insights
+- Historical trends and aggregations
+
+All data is reliable, curated, and modeled for reporting purposes.
+
+Time-based analysis should use date fields like SignupDate and PurchaseDate.
+Session duration should be calculated using SessionStart and SessionEnd.
+
+This data source contains four primary tables: games, players, purchases, and sessions. Each table serves a specific analytical purpose and is related through common identifiers such as PlayerID and GameID.
+
+
+
+
+
+
+Data source instructions
+---------------------------
+
+## Games Table
+
+The **games** table stores metadata about each game available on the platform.
+
+**Schema:**
+
+* GameID (Primary Key): Unique identifier for each game
+* GameName: Name of the game
+* Genre: Category of the game (e.g., Action, Puzzle, Racing)
+
+**Usage:**
+This table should be used to group and filter analytics by game title or genre. It is commonly joined with the sessions table using GameID to analyze gameplay metrics such as total sessions, average scores, or engagement trends per game.
+
+
+---
+
+## Players Table
+
+The **players** table contains demographic and registration information for each player.
+
+**Schema:**
+
+* PlayerID (Primary Key): Unique identifier for each player
+* PlayerName: Name of the player
+* Country: Country of origin
+* SignupDate: Date when the player registered
+* Age: Age of the player
+
+**Usage:**
+This table is used for segmentation analysis such as player distribution by country, age group, or cohort analysis based on signup date. It is commonly joined with sessions and purchases using PlayerID.
+
+
+---
+
+## Purchases Table
+
+The **purchases** table records all in-game purchase transactions made by players.
+
+**Schema:**
+
+* PurchaseID (Primary Key): Unique transaction identifier
+* PlayerID (Foreign Key): Links to players table
+* Amount: Monetary value of the purchase
+* PurchaseDate: Date of purchase
+* Item: Name/type of item purchased
+
+**Usage:**
+This table is used to calculate revenue metrics such as total revenue, average revenue per user (ARPU), and purchasing trends. It should always be joined with the players table when user-level analysis is required.
+
+
+---
+
+## Sessions Table
+
+The **sessions** table captures gameplay activity at the session level.
+
+**Schema:**
+
+* SessionID (Primary Key): Unique session identifier
+* PlayerID (Foreign Key): Links to players table
+* GameID (Foreign Key): Links to games table
+* SessionStart: Start timestamp of the session
+* SessionEnd: End timestamp of the session
+* Score: Score achieved in the session
+
+**Usage:**
+This is the most critical table for engagement analytics. It is used to calculate:
+
+* Total sessions
+* Active users
+* Average session duration
+* Game performance metrics
+
+Session duration should be calculated as:
+SessionEnd - SessionStart
+
+---
+
+## Relationships
+
+* players.PlayerID → sessions.PlayerID
+* players.PlayerID → purchases.PlayerID
+* games.GameID → sessions.GameID
+
+These relationships enable cross-functional analysis such as:
+
+* Revenue per game
+* Engagement by player demographics
+* Game popularity trends
+
+
+---
+
+## Analytical Guidelines
+
+* Use **sessions table** for engagement and activity metrics
+* Use **purchases table** for revenue-related calculations
+* Use **players table** for demographic segmentation
+* Use **games table** for game-level grouping
+
+---
+
+## Metric Definitions
+
+### Active Users
+
+Count of distinct PlayerID from sessions table
+
+### Total Revenue
+
+Sum of Amount from purchases table
+
+### Average Session Duration
+
+Average of (SessionEnd - SessionStart)
+
+### Total Sessions
+
+Count of SessionID
+
+### Top Game
+
+Game with highest sessions or revenue depending on context
+
+---
+
+## Calculation Rules
+
+* Session Duration = SessionEnd - SessionStart
+* Revenue aggregation = SUM(Amount)
+* Distinct users = COUNT(DISTINCT PlayerID)
+
+---
+
+## Important Notes
+
+* This is **historical data**, not real-time
+* All aggregations should be computed using warehouse tables unless explicitly stated otherwise
+* Avoid mixing this data with real-time sources like KQL unless required
+* Always use joins when combining data across entities
+
+
+---
+
+
+
+
+
+Data source description (KQL DB)
+---------------------------------
+
+# Data Source Description Gaming_EH
+
+The KQL Database contains **real-time streaming data** representing live gameplay events generated by players across different games. This data source is designed for **low-latency analytics**, enabling near real-time insights into player behavior, game activity, and live trends. Unlike the data warehouse, which stores historical and aggregated session-level data, the KQL database captures **granular event-level data** as it occurs.
+
+This data source should be used when the user’s query involves **recent activity, live trends, current engagement,or real-time monitoring**. It is not intended for long-term historical reporting or financial calculations unless explicitly required.
+
+
+
+
+
+Data source instructions
+---------------------------
+## GameEvents Table
+
+The **GameEvents** table is the primary and only table in the KQL database. It stores individual gameplay events generated during active sessions.
+
+**Schema:**
+
+* EventTime (datetime): Timestamp of when the event occurred
+* PlayerID (int): Unique identifier of the player generating the event
+* GameID (int): Identifier of the game associated with the event
+* EventType (string): Type of event (e.g., MatchStart, MatchEnd, LevelUp, Purchase, Kill)
+* Value (int): Numeric value associated with the event (e.g., score gained, coins earned, or event-specific metric)
+
+---
+
+## Nature of Data
+
+* **Real-time streaming data**
+* High volume, append-only events
+* Each row represents a **single event**, not a session or aggregate
+* Data is continuously updated and reflects the **current state of gameplay activity**
+
+---
+
+## Usage Scenarios
+
+This data source should be used for:
+
+* Identifying **currently trending games**
+* Monitoring **live player activity**
+* Tracking **event frequency (e.g., logins, level completions)**
+* Detecting **spikes in activity**
+* Building **real-time dashboards**
+
+---
+
+## Key Analytical Concepts
+
+### Active Players (Real-Time)
+
+Defined as:
+
+* Count of distinct PlayerID within a recent time window (e.g., last 5 or 10 minutes)
+
+### Event Count
+
+Total number of events within a time range
+
+### Trending Game
+
+Game with highest number of events or active players in a recent time window
+
+---
+## Metric Definitions
+
+### Active Players (Real-Time)
+
+Distinct count of PlayerID within time window
+
+### Event Count
+Total number of rows (count)
+
+### Trending Game
+Game with highest event count OR distinct players
+
+---
+
+## Aggregation Rules
+
+* Use `summarize` for grouping
+* Use `count()` for total events
+* Use `dcount(PlayerID)` for unique players
+
+---
+
+## Query Behavior Guidelines
+
+* Always filter on **recent time windows** for real-time insights
+* Use aggregation functions like `summarize`, `count()`, `dcount()`
+* Avoid interpreting event data as session or revenue data directly
+---
+
+
+
+
+
+
+
+-----------------------------------------------------
+
+
+
+## Example Use Cases
+
+* “Which game is trending right now?”
+* “How many players are active in the last 10 minutes?”
+* “What is the most common event type currently?”
+
+---
+
+
+
+
+
+
+
+6. Ask Questions (After Optimization)
+
+Question:
+
+How many players are active daily?
+
+
+Question:
+
+Which game is trending currently?
+
+
+Question:
+
+What are the most common events happening right now?
+
+
+Question:
+
+What is the total revenue generated per game?
+
+
+Question:
+
+What is the average session duration per game?
+
+
+Question:
+
+Which game is trending now and also has highest revenue?
+
+
+
+Publish Data Agent
+
+Description of purpose and capabilities:
+
+The objective of this agent is to provide accurate, context-aware insights for gaming analytics by interpreting user queries and retrieving relevant information from both historical (warehouse) and real-time (KQL) data sources. The agent should ensure correct metric definitions, avoid ambiguity, and deliver clear, business-friendly responses.
+
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Semantic Model (Power BI)
+--------------------------
+
+Prepare for Lamna HealthCare Data
+
+
+
+
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+Fabric Data Agents - Azure AI Foundry Integration
+------------------------------------------------------
+https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/fabric?tabs=prompt-agents&pivots=python
+
+
+Create a resource group: rg-gaming-agent in azure portal.
+
+
+Login to https://ai.azure.com/
+
+Click Start Building
+
+Create a Project
+
+    - Give projetc name: Gaming-Agent
+    - In advance select rg: - rg-gaming-agent
+    - Deploy a Base Model under Models + Endpoint: gpt-5-mini (East US 2), Token per min: 20K
+    - Once setup go to play ground or Agent 
+    - Add agent instructions:
+        
+        ## Objective:
+        The Fabric Data Agent (Gaming Agent) is a specialized Fabric tool designed to retrieve, analyze, and reason over gaming-related data stored within Microsoft Fabric (e.g., player stats, telemetry, in-game events, leaderboards, and engagement metrics).
+
+        As an Azure AI Agent, you should use Fabric Data Agent as Knowledge source when user requests require data-backed insights, queries, or analytics related to gaming datasets.
+
+        ## When to Use the Fabric Tool
+
+        Invoke the Fabric Data Agent only when all of the following conditions are met:
+
+         The user request involves structured or semi-structured gaming data, such as:
+         - Player statistics (scores, rankings, progression)
+         - Game telemetry (sessions, actions, events)
+         - Performance metrics (latency, win rates, retention)
+         - Leaderboards or competitions
+         - The query requires real-time or stored data retrieval from Fabric.
+         - The answer cannot be reliably generated from general knowledge alone.
+         - The request benefits from aggregation, filtering, or analysis (e.g., trends, comparisons, summaries).
+    
+    
+    - Add Agent Description:
+        
+        The Fabric Data Agent (Gaming Agent) retrieves and analyzes gaming data stored in Microsoft Fabric to deliver data-driven insights. It is used for queries involving player statistics, game telemetry, leaderboards, performance metrics, and engagement analytics when answers require retrieving, filtering, aggregating, or analyzing real-time or stored gaming data.
+        
+    and add Fabric Data Agent in Knowledge
+    
+
+
+
+
+
+
+
+
+
+
+
+Examples:
+How many players are active daily?
+Which game is trending currently?
+What are the most common events happening right now?
+What is the total revenue generated per game?
+What is the average session duration per game?
+Which game is trending now and also has highest revenue?
+
+
+Who is the best player?
+
+What is total revenue?
+
+How many kills happened?
